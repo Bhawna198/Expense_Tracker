@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
+import Navbar from '../components/Navbar';
 import axios from 'axios';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title } from 'chart.js';
 import { Pie, Bar } from 'react-chartjs-2';
@@ -13,6 +14,7 @@ const Dashboard = () => {
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [budgets, setBudgets] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [currentExpense, setCurrentExpense] = useState(null);
@@ -20,7 +22,8 @@ const Dashboard = () => {
     amount: '',
     description: '',
     category: '',
-    date: new Date().toISOString().split('T')[0]
+    date: new Date().toISOString().split('T')[0],
+    budget_id: ''
   });
   const [categoryData, setCategoryData] = useState({
     labels: [],
@@ -31,9 +34,10 @@ const Dashboard = () => {
     datasets: []
   });
 
-  // Fetch expenses when component mounts
+  // Fetch expenses and budgets when component mounts
   useEffect(() => {
     fetchExpenses();
+    fetchBudgets();
   }, []);
 
   // Prepare chart data when expenses change
@@ -52,6 +56,15 @@ const Dashboard = () => {
     } catch (err) {
       setError('Failed to fetch expenses');
       setLoading(false);
+    }
+  };
+
+  const fetchBudgets = async () => {
+    try {
+      const res = await axios.get('http://localhost:5000/api/budgets/summary');
+      setBudgets(res.data);
+    } catch (err) {
+      console.error('Failed to fetch budgets:', err);
     }
   };
 
@@ -131,7 +144,8 @@ const Dashboard = () => {
         amount: '',
         description: '',
         category: '',
-        date: new Date().toISOString().split('T')[0]
+        date: new Date().toISOString().split('T')[0],
+        budget_id: ''
       });
       setShowAddForm(false);
       fetchExpenses();
@@ -146,7 +160,8 @@ const Dashboard = () => {
       amount: expense.amount,
       description: expense.description,
       category: expense.category,
-      date: new Date(expense.date).toISOString().split('T')[0]
+      date: new Date(expense.date).toISOString().split('T')[0],
+      budget_id: expense.budget_id || ''
     });
     setShowEditForm(true);
   };
@@ -178,18 +193,60 @@ const Dashboard = () => {
 
   return (
     <div className="dashboard-container">
+      <Navbar />
       <header className="dashboard-header">
-        <h1>Expense Tracker</h1>
+        <h1>Dashboard</h1>
         <div className="user-info">
-          <span>Welcome, {user?.name}</span>
-          <button onClick={logout} className="btn btn-logout">Logout</button>
+          <span>Welcome back, {user?.name}!</span>
         </div>
       </header>
 
       <div className="dashboard-content">
+        {/* Budget Overview */}
+        {budgets.length > 0 && (
+          <div className="budget-overview">
+            <h3>Budget Overview</h3>
+            <div className="budget-cards-mini">
+              {budgets.slice(0, 3).map(budget => {
+                const progressPercentage = Math.min((budget.total_spent / budget.amount) * 100, 100);
+                const isOverBudget = budget.total_spent > budget.amount;
+                return (
+                  <div key={budget.id} className="budget-card-mini">
+                    <div className="budget-mini-header">
+                      <span className="budget-mini-name">{budget.name}</span>
+                      <span className={`budget-mini-status ${isOverBudget ? 'over' : 'good'}`}>
+                        {isOverBudget ? 'Over Budget' : 'On Track'}
+                      </span>
+                    </div>
+                    <div className="budget-mini-progress">
+                      <div className="progress-bar-mini">
+                        <div
+                          className="progress-fill-mini"
+                          style={{
+                            width: `${Math.min(progressPercentage, 100)}%`,
+                            backgroundColor: isOverBudget ? '#e74c3c' : '#27ae60'
+                          }}
+                        ></div>
+                      </div>
+                      <span className="progress-text-mini">
+                        ${budget.total_spent || 0} / ${budget.amount}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {budgets.length > 3 && (
+              <p className="budget-overview-note">
+                Showing 3 of {budgets.length} budgets. <a href="/budgets">View all budgets</a>
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="expense-actions">
-          <button 
-            onClick={() => setShowAddForm(!showAddForm)} 
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
             className="btn btn-primary"
           >
             {showAddForm ? 'Cancel' : 'Add Expense'}
@@ -244,6 +301,23 @@ const Dashboard = () => {
                   <option value="Entertainment">Entertainment</option>
                   <option value="Healthcare">Healthcare</option>
                   <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="budget_id">Budget (Optional)</label>
+                <select
+                  id="budget_id"
+                  name="budget_id"
+                  value={formData.budget_id}
+                  onChange={handleInputChange}
+                >
+                  <option value="">No Budget</option>
+                  {budgets.filter(b => b.status === 'active').map(budget => (
+                    <option key={budget.id} value={budget.id}>
+                      {budget.name} (${budget.remaining || budget.amount} remaining)
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -310,6 +384,23 @@ const Dashboard = () => {
                   <option value="Entertainment">Entertainment</option>
                   <option value="Healthcare">Healthcare</option>
                   <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="edit-budget_id">Budget (Optional)</label>
+                <select
+                  id="edit-budget_id"
+                  name="budget_id"
+                  value={formData.budget_id}
+                  onChange={handleInputChange}
+                >
+                  <option value="">No Budget</option>
+                  {budgets.filter(b => b.status === 'active').map(budget => (
+                    <option key={budget.id} value={budget.id}>
+                      {budget.name} (${budget.remaining || budget.amount} remaining)
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -390,6 +481,7 @@ const Dashboard = () => {
                   <th>Date</th>
                   <th>Description</th>
                   <th>Category</th>
+                  <th>Budget</th>
                   <th>Amount</th>
                   <th>Actions</th>
                 </tr>
@@ -400,6 +492,15 @@ const Dashboard = () => {
                     <td>{new Date(expense.date).toLocaleDateString()}</td>
                     <td>{expense.description}</td>
                     <td>{expense.category}</td>
+                    <td>
+                      {expense.budget_id ? (
+                        <span className="budget-tag">
+                          {budgets.find(b => b.id === expense.budget_id)?.name || 'Unknown Budget'}
+                        </span>
+                      ) : (
+                        <span className="no-budget">No Budget</span>
+                      )}
+                    </td>
                     <td>${parseFloat(expense.amount).toFixed(2)}</td>
                     <td>
                       <button 

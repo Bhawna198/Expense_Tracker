@@ -16,6 +16,7 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/expenses', require('./routes/expenses'));
+app.use('/api/budgets', require('./routes/budgets'));
 
 // Default route
 app.get('/', (req, res) => {

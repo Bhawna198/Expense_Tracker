@@ -7,7 +7,7 @@ const auth = require('../middleware/auth');
 // @desc    Create a new expense
 // @access  Private
 router.post('/', auth, async (req, res) => {
-  const { amount, description, category, date } = req.body;
+  const { amount, description, category, date, budget_id } = req.body;
 
   // Simple validation
   if (!amount || !description || !category || !date) {
@@ -20,7 +20,8 @@ router.post('/', auth, async (req, res) => {
       amount,
       description,
       category,
-      date
+      date,
+      budget_id: budget_id || null
     };
 
     const expense = await Expense.create(expenseData);
@@ -70,7 +71,7 @@ router.get('/:id', auth, async (req, res) => {
 // @desc    Update an expense
 // @access  Private
 router.put('/:id', auth, async (req, res) => {
-  const { amount, description, category, date } = req.body;
+  const { amount, description, category, date, budget_id } = req.body;
 
   // Simple validation
   if (!amount || !description || !category || !date) {
@@ -89,7 +90,8 @@ router.put('/:id', auth, async (req, res) => {
       amount,
       description,
       category,
-      date
+      date,
+      budget_id: budget_id || null
     };
     
     const updatedExpense = await Expense.update(req.params.id, req.user.id, expenseData);
@@ -150,6 +152,36 @@ router.get('/summary/category', auth, async (req, res) => {
     
     const categorySummary = await Expense.getCategorySummary(req.user.id, startDate, endDate);
     res.json(categorySummary);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error');
+  }
+});
+
+// @route   GET api/expenses/with-budgets
+// @desc    Get expenses with budget information
+// @access  Private
+router.get('/with-budgets', auth, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+
+    const expenses = await Expense.getExpensesWithBudgets(req.user.id, limit, offset);
+    res.json(expenses);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error');
+  }
+});
+
+// @route   GET api/expenses/budget/:budgetId
+// @desc    Get expenses for a specific budget
+// @access  Private
+router.get('/budget/:budgetId', auth, async (req, res) => {
+  try {
+    const expenses = await Expense.findByBudgetId(req.params.budgetId, req.user.id);
+    res.json(expenses);
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server error');

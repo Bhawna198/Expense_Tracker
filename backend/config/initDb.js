@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const Expense = require('../models/Expense');
+const Budget = require('../models/Budget');
 const { testConnection } = require('./db');
 
 async function initializeDatabase() {
@@ -11,8 +12,14 @@ async function initializeDatabase() {
       return false;
     }
 
-    // Create tables
+    // Create tables in correct order (users first, then budgets, then expenses)
+    console.log('Creating users table...');
     await User.createTable();
+    
+    console.log('Creating budgets table...');
+    await Budget.createTable();
+    
+    console.log('Creating expenses table...');
     await Expense.createTable();
 
     console.log('Database initialization completed successfully');

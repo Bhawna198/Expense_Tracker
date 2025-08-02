@@ -10,10 +10,36 @@ class Expense {
         description VARCHAR(255) NOT NULL,
         category VARCHAR(100) NOT NULL,
         date DATE NOT NULL,
+        budget_id INT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       )
     `;
+    
+    try {
+      await pool.query(createTableQuery);
+      console.log('Expenses table created or already exists');
+      
+      // Add budget_id foreign key constraint separately to handle existing tables
+      try {
+        await pool.query(`
+          ALTER TABLE expenses
+          ADD CONSTRAINT fk_expense_budget
+          FOREIGN KEY (budget_id) REFERENCES budgets(id) ON DELETE SET NULL
+        `);
+        console.log('Budget foreign key constraint added to expenses table');
+      } catch (constraintError) {
+        // Constraint might already exist, which is fine
+        if (!constraintError.message.includes('Duplicate key name')) {
+          console.log('Budget foreign key constraint already exists or budgets table not ready yet');
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error creating expenses table:', error.message);
+      return false;
+    }
     
     try {
       await pool.query(createTableQuery);
@@ -26,12 +52,12 @@ class Expense {
   }
 
   static async create(expenseData) {
-    const { user_id, amount, description, category, date } = expenseData;
+    const { user_id, amount, description, category, date, budget_id } = expenseData;
     
     try {
       const [result] = await pool.query(
-        'INSERT INTO expenses (user_id, amount, description, category, date) VALUES (?, ?, ?, ?, ?)',
-        [user_id, amount, description, category, date]
+        'INSERT INTO expenses (user_id, amount, description, category, date, budget_id) VALUES (?, ?, ?, ?, ?, ?)',
+        [user_id, amount, description, category, date, budget_id || null]
       );
       
       const [rows] = await pool.query('SELECT * FROM expenses WHERE id = ?', [result.insertId]);
@@ -69,12 +95,12 @@ class Expense {
   }
 
   static async update(id, userId, expenseData) {
-    const { amount, description, category, date } = expenseData;
+    const { amount, description, category, date, budget_id } = expenseData;
     
     try {
       const [result] = await pool.query(
-        'UPDATE expenses SET amount = ?, description = ?, category = ?, date = ? WHERE id = ? AND user_id = ?',
-        [amount, description, category, date, id, userId]
+        'UPDATE expenses SET amount = ?, description = ?, category = ?, date = ?, budget_id = ? WHERE id = ? AND user_id = ?',
+        [amount, description, category, date, budget_id || null, id, userId]
       );
       
       if (result.affectedRows === 0) {
@@ -125,6 +151,38 @@ class Expense {
       return rows;
     } catch (error) {
       console.error('Error getting category summary:', error.message);
+      throw error;
+    }
+  }
+  static async findByBudgetId(budgetId, userId) {
+    try {
+      const [rows] = await pool.query(
+        'SELECT * FROM expenses WHERE budget_id = ? AND user_id = ? ORDER BY date DESC',
+        [budgetId, userId]
+      );
+      return rows;
+    } catch (error) {
+      console.error('Error finding expenses by budget ID:', error.message);
+      throw error;
+    }
+  }
+
+  static async getExpensesWithBudgets(userId, limit = 50, offset = 0) {
+    try {
+      const [rows] = await pool.query(`
+        SELECT
+          e.*,
+          b.name as budget_name,
+          b.category as budget_category
+        FROM expenses e
+        LEFT JOIN budgets b ON e.budget_id = b.id
+        WHERE e.user_id = ?
+        ORDER BY e.date DESC
+        LIMIT ? OFFSET ?
+      `, [userId, limit, offset]);
+      return rows;
+    } catch (error) {
+      console.error('Error finding expenses with budgets:', error.message);
       throw error;
     }
   }
